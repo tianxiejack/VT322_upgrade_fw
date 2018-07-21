@@ -137,6 +137,11 @@ int main(int argc,char **argv)
 											printf("%s,%d,it is upgrade fw\n",__FILE__,__LINE__);
 							                		upgradefw(swap_data.buf,swap_data.len);
 										}
+										else if(swap_data.buf[4]==0x32)
+										{
+											printf("%s,%d,it is import config file\n",__FILE__,__LINE__);
+							                		impconfig(swap_data.buf,swap_data.len);
+										}
 										else
 										{
 											printf("%s,%d,it is other command\n",__FILE__,__LINE__);
@@ -243,6 +248,50 @@ int upgradefw(unsigned char *swap_data_buf, unsigned int swap_data_len)
 	}
 	
 }
+
+int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
+{
+	static FILE *fp2;
+	int write_len;
+	int file_len;
+	static int current_len2 = 0;
+	static int filestatus2 = 0;
+	int recv_len = swap_data_len-13;
+	unsigned char buf[7] = {0xEB,0x53,0x07,0x00,0x35,0x00,0x00};
+
+	memcpy(&file_len,swap_data_buf+5,4);
+	if(filestatus2 == 0)
+	{
+		if(NULL ==(fp2 = fopen("Profile.yml","w")))
+		{
+			perror("fopen\r\n");
+			return -1;
+		}
+	}
+	filestatus2 = 1;
+	write_len = fwrite(swap_data_buf+12,1,recv_len,fp2);
+	fflush(fp2);
+	if(write_len < recv_len)
+	{
+		printf("Write import config file error!\r\n");
+		return -1;
+	}
+	current_len2 += recv_len;
+	if(current_len2 == file_len)
+	{
+		current_len2 = 0;
+		filestatus2 = 0;
+		fclose(fp2);
+		
+		if(0 == system("cp Profile.yml ~/dss_pkt"))
+			printf("cp right\n");
+		else
+			;
+
+	}
+	
+}
+
 
 int check_sum(unsigned char *buf, int  len)
 {
