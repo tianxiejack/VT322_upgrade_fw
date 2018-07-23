@@ -92,7 +92,7 @@ int main(int argc,char **argv)
 				}
 				if(recv_len==0)
 				{
-					printf("read end\n");
+					//printf("read end\n");
 					break;
 				}
 				uartdata_pos = 0;
@@ -142,6 +142,11 @@ int main(int argc,char **argv)
 											printf("%s,%d,it is import config file\n",__FILE__,__LINE__);
 							                		impconfig(swap_data.buf,swap_data.len);
 										}
+										else if(swap_data.buf[4]==0x33)
+										{
+											printf("%s,%d,it is export config file\n",__FILE__,__LINE__);
+							                		expconfig(accept_fd);
+										}
 										else
 										{
 											printf("%s,%d,it is other command\n",__FILE__,__LINE__);
@@ -184,7 +189,7 @@ int SocketRecv(int m_port, void *rcv_buf,int data_len)
 			return -1;
 		}
 		else if(0 == fs_sel){
-			printf("Warning: Uart Recv  time  out!!\r\n");
+			//printf("Warning: Uart Recv  time  out!!\r\n");
 			return 0;
 		}
 }
@@ -283,7 +288,7 @@ int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
 		filestatus2 = 0;
 		fclose(fp2);
 		
-		if(0 == system("cp Profile.yml ~/dss_pkt"))
+		if(0 == system("cp Profile.yml ~/dss_pkt/"))
 			printf("cp right\n");
 		else
 			;
@@ -292,6 +297,87 @@ int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
 	
 }
 
+int expconfig(int accept_fd)
+{
+	printf("it is export config\n");
+	int write_len = 0;
+	int len = 0;
+	FILE *fp;
+	int filesize = 0;
+	int sendsize = 0;
+	int packet_flag;
+	unsigned char checksum = 0;
+	unsigned char usocket_send_buf[1024+256] = {0};
+	unsigned char buf[1024+256] = {0};
+	//write_len = write(accept_fd,usocket_send_buf,16);
+	if(NULL ==(fp = fopen("/home/ubuntu/dss_vt322/Profile.yml","r")))
+	{
+		perror("fopen\r\n");
+		return -1;
+	}
+
+	fseek(fp,0,SEEK_END);
+	filesize = ftell(fp);
+	fseek(fp,0,SEEK_SET);
+
+	usocket_send_buf[0] = 0xEB;
+	usocket_send_buf[1] = 0x53;
+	usocket_send_buf[4] = 0x33;
+	usocket_send_buf[5] = filesize&0xff;
+        usocket_send_buf[6] = (filesize>>8)&0xff;
+        usocket_send_buf[7] = (filesize>>16)&0xff;
+        usocket_send_buf[8] = (filesize>>24)&0xff;
+	packet_flag = 0;
+
+	while(len = fread(buf,1,1024,fp))
+	{
+		checksum = 0;
+		if(len<0)
+		{
+		    printf("read error!\n");
+		    break;
+		}
+		sendsize += len;
+		if(packet_flag == 0)
+		{
+		    usocket_send_buf[9] = 0;
+		    packet_flag = 1;
+		}
+		else if(sendsize == filesize)
+		{
+		    usocket_send_buf[9] = 2;
+		}
+		else
+		{
+		  usocket_send_buf[9] = 1;
+		}
+		usocket_send_buf[2] = (len+8)&0xff;
+		usocket_send_buf[3] = ((len+8)>>8)&0xff;
+		usocket_send_buf[10] = len&0xff;
+		usocket_send_buf[11] = (len>>8)&0xff;
+		memcpy(usocket_send_buf+12,buf, len);
+		for(int m = 1; m<12+len;m++)
+		    checksum ^= usocket_send_buf[m];
+		usocket_send_buf[12+len] = checksum;
+		
+		write_len = write(accept_fd,usocket_send_buf,len+13);
+		printf("write to usocket %d bytes:\n", write_len);
+		for(int n = 0; n < write_len; n++)
+			printf("%02x ", usocket_send_buf[n]);
+		printf("\n");
+		
+	}
+        if(sendsize == filesize)
+        {
+            printf("export success\n");
+        }
+        else
+        {
+            printf("export fail\n");
+        }
+	fclose(fp);
+	
+}
 
 int check_sum(unsigned char *buf, int  len)
 {
