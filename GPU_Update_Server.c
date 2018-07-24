@@ -135,12 +135,12 @@ int main(int argc,char **argv)
 										if(swap_data.buf[4]==0x35)
 										{
 											printf("%s,%d,it is upgrade fw\n",__FILE__,__LINE__);
-							                		upgradefw(swap_data.buf,swap_data.len);
+							                		upgradefw(accept_fd,swap_data.buf,swap_data.len);
 										}
 										else if(swap_data.buf[4]==0x32)
 										{
 											printf("%s,%d,it is import config file\n",__FILE__,__LINE__);
-							                		impconfig(swap_data.buf,swap_data.len);
+							                		impconfig(accept_fd,swap_data.buf,swap_data.len);
 										}
 										else if(swap_data.buf[4]==0x33)
 										{
@@ -201,16 +201,9 @@ int fw_update_runtar(void)
 	char cmdBuf[128];	
 	sprintf(cmdBuf, "tar -zxvf %s", "dss_pkt.tar.gz");
 	iRtn = system(cmdBuf);
-	if(iRtn != 0){
-		printf(" [FWUP_NET] %s rtn=%d\n",__func__, iRtn);
-	}
-	else
-	{
-		iRtn = system("cp dss_pkt/* ~/dss_pkt");
-	}
 	return iRtn;
 }
-int upgradefw(unsigned char *swap_data_buf, unsigned int swap_data_len)
+int upgradefw(int accept_fd, unsigned char *swap_data_buf, unsigned int swap_data_len)
 {
 	static FILE *fp;
 	int write_len;
@@ -218,7 +211,7 @@ int upgradefw(unsigned char *swap_data_buf, unsigned int swap_data_len)
 	static int current_len = 0;
 	static int filestatus = 0;
 	int recv_len = swap_data_len-13;
-	unsigned char buf[7] = {0xEB,0x53,0x07,0x00,0x35,0x00,0x00};
+	unsigned char buf[7] = {0xEB,0x53,0x02,0x00,0x35,0x00,0x00};
 
 	memcpy(&file_len,swap_data_buf+5,4);
 	if(filestatus == 0)
@@ -245,16 +238,20 @@ int upgradefw(unsigned char *swap_data_buf, unsigned int swap_data_len)
 		fclose(fp);
 		
 		if(fw_update_runtar() == 0)
-			;//respupgradefw= 0x01;
+			buf[5] = 0x01;
 		else
-			;
-			//respupgradefw = 0x02;
-		//feedback=ACK_upgradefw;
+			buf[5] = 0x02;
+		for(int i = 1; i < 6; i++)
+			buf[6] ^= buf[i];
+		int a = write(accept_fd,buf,7);
+		printf("upgrade response %d bytes:", a);
+		for(int j = 0; j<7;j++)
+			printf("%02x ", buf[j]);
+		printf("\n");
 	}
-	
 }
 
-int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
+int impconfig(int accept_fd,unsigned char *swap_data_buf, unsigned int swap_data_len)
 {
 	static FILE *fp2;
 	int write_len;
@@ -262,7 +259,7 @@ int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
 	static int current_len2 = 0;
 	static int filestatus2 = 0;
 	int recv_len = swap_data_len-13;
-	unsigned char buf[7] = {0xEB,0x53,0x07,0x00,0x35,0x00,0x00};
+	unsigned char buf[7] = {0xEB,0x53,0x02,0x00,0x32,0x00,0x00};
 
 	memcpy(&file_len,swap_data_buf+5,4);
 	if(filestatus2 == 0)
@@ -289,10 +286,17 @@ int impconfig(unsigned char *swap_data_buf, unsigned int swap_data_len)
 		fclose(fp2);
 		
 		if(0 == system("cp Profile.yml ~/dss_pkt/"))
-			printf("cp right\n");
+			buf[5] = 0x01;
 		else
-			;
-
+			buf[5] = 0x02;
+		for(int i = 1; i < 6; i++)
+			buf[6] ^= buf[i];
+		int a = write(accept_fd,buf,7);
+		printf("importfile response %d bytes:", a);
+		for(int j = 0; j<7;j++)
+			printf("%02x ", buf[j]);
+		printf("\n");
+		
 	}
 	
 }
